@@ -24,3 +24,15 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Mặc định trên Mobile: Vuông vức, không bo góc */
+#chat3 {
+  border-radius: 0 !important;
+}
+
+/* Từ màn hình Tablet/PC trở lên: Bo góc 15px */
+@media (min-width: 768px) {
+  #chat3 {
+    border-radius: 15px !important;
+  }
+}

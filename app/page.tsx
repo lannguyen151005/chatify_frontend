@@ -1,68 +1,232 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useEffect, useState } from 'react';
+import { ConversationList } from './chat/ConversationList';
+import { ChatWindow } from './chat/ChatWindow';
+import api from './utils/api';
+import useWebSocket from 'react-use-websocket';
+
+export default function ChatPage() {
+  
+  const [conversations, setConversations] = useState([]);
+  const [messages, setMessages] = useState<any[]>([]);
+
+  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
+  const [activeChat, setActiveChat] = useState({id: "", name: ""});
+  const [isTyping, setIsTyping] = useState(false);
+
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set);
+
+  //Lay thong tin chung thuc tu local storage
+  const token = typeof window !== "undefined" ?localStorage.getItem("jwt_token"):"";
+  const myUserId = typeof window !== "undefined"? localStorage.getItem("user_id"):"";
+
+  //Lay danh sach phong chat
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        const res = await api.get('/api/conversations'); 
+        
+        const formattedData = res.data.map((conv: any) => {
+          const timeString = new Date(conv.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+          return {
+            id: conv.id, 
+            name: conv.title || "Phòng chat chưa đặt tên", 
+            lastMessage: "Bấm để xem tin nhắn...", 
+            time: timeString,
+            avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
+            isOnline: true 
+          };
+        });
+        
+        setConversations(formattedData);
+      } catch (error) {
+        console.error("Lỗi lấy danh sách phòng chat:", error);
+      }
+    };
+    fetchConversations();
+  }, []);
+  
+  
+  const handleSelectConversation = async (id: string, name: string) => {
+    setActiveChat({id, name});
+    setIsMobileChatOpen(true);
+    setOnlineUsers(new Set);
+    try{
+      const res = await api.get(`/api/messages/${id}`);
+      const historyMessages = res.data.map(
+        (msg:any) => (
+          {
+            id: msg.id,
+            content: msg.content,
+            time: new Date(msg.created_at).toLocaleTimeString(), 
+            isMe: msg.user_id === myUserId, 
+            avatar: msg.user_id === myUserId ? "/my-avatar.png" : "/friend-avatar.png",
+            attachmentUrl: msg.attachment_url 
+          }
+        )
+      );
+      setMessages(historyMessages);
+    }catch (error){
+      console.error("Lỗi lấy lịch sử tin nhắn:", error);
+      setMessages([]);
+    }
+  };
+
+  // url kết nối websocket chỉ kết nối khi đã chọn 1 phòng chat (có activeChat.id)
+  const socketUrl = activeChat.id ? `ws://localhost:8080/chat/${activeChat.id}?token=${token}` : null;
+
+  const { sendMessage: sendWsMessage, lastJsonMessage } = useWebSocket(socketUrl, {
+    shouldReconnect: () => true,
+  });
+
+  // Lắng nghe sự kiện đẩy về từ Quarkus (Hứng luồng dữ liệu)
+  useEffect(() => {
+    if (lastJsonMessage) {
+      const data: any = lastJsonMessage;
+
+      // xử lý luồng trạng thái Online/Offline
+      if (data.type === "STATUS") {
+        // Chỉ quan tâm trạng thái của người khác, không phải của mình
+        if (data.user_id !== myUserId) {
+          setOnlineUsers(prev => {
+            const newSet = new Set(prev);
+            if (data.is_online) {
+              newSet.add(data.user_id); // Có người vào -> Thêm vào danh sách
+            } else {
+              newSet.delete(data.user_id); // Có người thoát -> Xóa khỏi danh sách
+            }
+            return newSet;
+          });
+        }
+        return;
+      }
+
+      // Xử lý luồng Đang gõ
+      if (data.type === "TYPING") {
+        // Chỉ hiện chữ "Đang gõ" nếu người gõ không phải là mình
+        if (data.senderId !== myUserId) {
+          setIsTyping(true);
+          setTimeout(() => setIsTyping(false), 3000);
+        }
+        return;
+      }
+
+      // Xử lý luồng Đã xem
+      if (data.type === "READ") {
+        console.log(`User ${data.userId} đã xem tin nhắn`);
+        return;
+      }
+
+      // Xử lý tin nhắn mới (CHAT)
+      // Nếu tin nhắn nhận được KHÔNG PHẢI của mình gửi thì mới cần render thêm (để tránh bị lặp 2 lần do mình đã render ở hàm handleSendMessage rồi)
+      if (data.user_id !== myUserId) {
+        const incomingMsg = {
+          id: data.id,
+          content: data.content,
+          time: new Date().toLocaleTimeString(),
+          isMe: false, // Chắc chắn là của người kia
+          avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
+          attachmentUrl: data.attachment_url
+        };
+        setMessages(prev => [...prev, incomingMsg]);
+      }
+    }
+  }, [lastJsonMessage, myUserId]);
+
+  // Hành động nhấn nút Gửi tin nhắn
+  const handleSendMessage = (text: string) => {
+    if (!text.trim()) return;
+    
+    // 1. Hiển thị ngay lên màn hình của MÌNH cho mượt (Optimistic UI)
+    const optimisticMsg = {
+      content: text,
+      time: new Date().toLocaleTimeString(),
+      isMe: true,
+      avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp"
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+
+    // 2. Bắn data JSON chuẩn DTO qua ống WebSocket lên Quarkus
+    sendWsMessage(JSON.stringify({
+      type: "CHAT",
+      content: text
+    }));
+  };
+
+  const handleTyping = () => {
+    sendWsMessage(JSON.stringify({ type: "TYPING" }));
+  };
+
+  // Tính năng Upload Ảnh (Tái sử dụng API Cloudinary)
+  const handleUploadFile = async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await api.post('/api/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      const fileUrl = response.data.url;
+      
+      // Hiển thị tạm ảnh của mình lên màn hình
+      setMessages(prev => [...prev, {
+        content: "Đã gửi một ảnh", time: new Date().toLocaleTimeString(), isMe: true,
+        avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp",
+        attachmentUrl: fileUrl
+      }]);
+
+      // Bắn link qua WS cho người kia
+      sendWsMessage(JSON.stringify({
+        type: "CHAT", content: "Đã gửi một ảnh", attachment_url: fileUrl
+      }));
+    } catch (error) {
+      alert("Lỗi tải ảnh lên!");
+    }
+  };
+  
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        
-        <h1>Hello world</h1>
-        
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <section
+      className="d-flex justify-content-center align-items-center vh-100 overflow-hidden"
+      style={{ backgroundColor: "#d6f0f4" }}
+    >
+      {/* p-0 (Mobile): Không có padding, tràn viền */}
+      {/* p-md-4 (PC): Thêm padding 24px để tạo lề */}
+      <div
+        className="w-100 h-100 p-0 p-md-4 d-flex justify-content-center"
+        style={{ maxWidth: "1400px" }}
+      >
+        <div
+          className="card shadow-lg w-100 h-100 border-0"
+          id="chat3"
+          style={{ overflow: "hidden" }} // Việc bo góc sẽ đẩy sang file CSS
+        >
+          {/* Thêm p-0 cho mobile, p-md-3 cho PC */}
+          <div className="card-body h-100 p-0 p-md-3">
+            <div className="row h-100 g-0">
+
+              <ConversationList
+                conversations={conversations}
+                onSelectConversation={handleSelectConversation}
+                isMobileChatOpen={isMobileChatOpen}
+              />
+
+              <ChatWindow
+                messages={messages}
+                isTyping={isTyping}
+                activeChatName={activeChat.name}
+                onSendMessage={handleSendMessage}
+                onTyping={handleTyping}
+                onUploadFile={(file) => console.log("Upload file:", file.name)}
+                isMobileChatOpen={isMobileChatOpen}
+                onBackToList={() => setIsMobileChatOpen(false)}
+              />
+
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </div>
+    </section>
   );
 }
