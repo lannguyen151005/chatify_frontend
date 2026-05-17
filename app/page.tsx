@@ -7,39 +7,44 @@ import api from './utils/api';
 import useWebSocket from 'react-use-websocket';
 
 export default function ChatPage() {
-  
+
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState<any[]>([]);
 
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
-  const [activeChat, setActiveChat] = useState({id: "", name: ""});
+  const [activeChat, setActiveChat] = useState({ id: "", name: "" });
   const [isTyping, setIsTyping] = useState(false);
 
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set);
 
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+
   //Lay thong tin chung thuc tu local storage
-  const token = typeof window !== "undefined" ?localStorage.getItem("jwt_token"):"";
-  const myUserId = typeof window !== "undefined"? localStorage.getItem("user_id"):"";
+  const token = typeof window !== "undefined" ? localStorage.getItem("jwt_token") : "";
+  const myUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") : "";
 
   //Lay danh sach phong chat
   useEffect(() => {
     const fetchConversations = async () => {
       try {
-        const res = await api.get('/api/conversations'); 
-        
+        const res = await api.get('/api/conversations');
+
         const formattedData = res.data.map((conv: any) => {
           const timeString = new Date(conv.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
           return {
-            id: conv.id, 
-            name: conv.title || "Phòng chat chưa đặt tên", 
-            lastMessage: "Bấm để xem tin nhắn...", 
+            id: conv.id,
+            name: conv.title || "Phòng chat chưa đặt tên",
+            lastMessage: "Bấm để xem tin nhắn...",
             time: timeString,
             avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
-            isOnline: true 
+            isOnline: true
           };
         });
-        
+
         setConversations(formattedData);
       } catch (error) {
         console.error("Lỗi lấy danh sách phòng chat:", error);
@@ -47,30 +52,87 @@ export default function ChatPage() {
     };
     fetchConversations();
   }, []);
-  
-  
+
+  const loadMoreMessages = async () => {
+    // nếu đang tải hoặc đã hết tin nhắn cũ hoặc chưa chọn chat thì bỏ qua
+    if (isLoadingMore || !hasMore || !activeChat.id) return;
+
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+
+    try {
+      const [res] = await Promise.all([
+        api.get(`/api/messages/${activeChat.id}?page=${nextPage}&size=20`),
+        new Promise(resolve => setTimeout(resolve, 1700)) 
+      ]);
+
+      if (res.data.length < 20) {
+        setHasMore(false); // Hết dữ liệu cũ
+      }
+
+      if (res.data.length > 0) {
+        const olderMessages = res.data.map((msg: any) => ({
+          id: msg.id,
+          content: msg.content,
+          time: new Date(msg.created_at).toLocaleTimeString(),
+          isMe: msg.user_id === myUserId,
+          avatar: msg.user_id === myUserId ? "/my-avatar.png" : "/friend-avatar.png",
+          attachmentUrl: msg.attachment_url
+        }));
+
+        //Nối tin nhắn cũ vào đầu mảng
+        setMessages(prev => [...olderMessages, ...prev]);
+        setPage(nextPage);
+      }
+    } catch (error) {
+      console.error("Lỗi tải thêm tin nhắn cũ:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
   const handleSelectConversation = async (id: string, name: string) => {
-    setActiveChat({id, name});
+    setActiveChat({ id, name });
     setIsMobileChatOpen(true);
     setOnlineUsers(new Set);
-    try{
-      const res = await api.get(`/api/messages/${id}`);
+
+    //Reset phân trang khi đổi phòng chat
+    setPage(0);
+    setHasMore(true);
+    setIsLoadingMore(false);
+
+    try {
+      const res = await api.get(`/api/messages/${id}?page=0&size=20`);
       const historyMessages = res.data.map(
-        (msg:any) => (
+        (msg: any) => (
           {
             id: msg.id,
             content: msg.content,
-            time: new Date(msg.created_at).toLocaleTimeString(), 
-            isMe: msg.user_id === myUserId, 
+            time: new Date(msg.created_at).toLocaleTimeString(),
+            isMe: msg.user_id === myUserId,
             avatar: msg.user_id === myUserId ? "/my-avatar.png" : "/friend-avatar.png",
-            attachmentUrl: msg.attachment_url 
+            attachmentUrl: msg.attachment_url
           }
         )
       );
+      //Nếu dữ liệu trả về ít hơn 20 -> hết tin nhắn cũ
+      if (res.data.length < 20) {
+        setHasMore(false);
+      }
       setMessages(historyMessages);
-    }catch (error){
+    } catch (error) {
       console.error("Lỗi lấy lịch sử tin nhắn:", error);
       setMessages([]);
+    }
+
+    try {
+      //Lấy danh sách user online trong group
+      const onlineRes = await api.get(`/api/conversations/${id}/online-users`);
+      //Lọc bỏ id của mình
+      const otherOnlineUsers = onlineRes.data.filter((uid: string) => uid != myUserId);
+      setOnlineUsers(new Set(otherOnlineUsers));
+    } catch (error) {
+      console.log("Lỗi không thể lấy danh sách online:", error);
     }
   };
 
@@ -138,8 +200,8 @@ export default function ChatPage() {
   // Hành động nhấn nút Gửi tin nhắn
   const handleSendMessage = (text: string) => {
     if (!text.trim()) return;
-    
-    // 1. Hiển thị ngay lên màn hình của MÌNH cho mượt (Optimistic UI)
+
+    // 1. Hiển thị ngay lên màn hình của mình
     const optimisticMsg = {
       content: text,
       time: new Date().toLocaleTimeString(),
@@ -167,9 +229,9 @@ export default function ChatPage() {
       const response = await api.post('/api/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      
+
       const fileUrl = response.data.url;
-      
+
       // Hiển thị tạm ảnh của mình lên màn hình
       setMessages(prev => [...prev, {
         content: "Đã gửi một ảnh", time: new Date().toLocaleTimeString(), isMe: true,
@@ -185,7 +247,7 @@ export default function ChatPage() {
       alert("Lỗi tải ảnh lên!");
     }
   };
-  
+
   return (
     <section
       className="d-flex justify-content-center align-items-center vh-100 overflow-hidden"
@@ -200,28 +262,49 @@ export default function ChatPage() {
         <div
           className="card shadow-lg w-100 h-100 border-0"
           id="chat3"
-          style={{ overflow: "hidden" }} // Việc bo góc sẽ đẩy sang file CSS
+          style={{ overflow: "hidden" }}
         >
           {/* Thêm p-0 cho mobile, p-md-3 cho PC */}
           <div className="card-body h-100 p-0 p-md-3">
             <div className="row h-100 g-0">
 
+              {/* BÊN TRÁI: Danh sách phòng chat */}
               <ConversationList
                 conversations={conversations}
                 onSelectConversation={handleSelectConversation}
                 isMobileChatOpen={isMobileChatOpen}
               />
 
-              <ChatWindow
-                messages={messages}
-                isTyping={isTyping}
-                activeChatName={activeChat.name}
-                onSendMessage={handleSendMessage}
-                onTyping={handleTyping}
-                onUploadFile={(file) => console.log("Upload file:", file.name)}
-                isMobileChatOpen={isMobileChatOpen}
-                onBackToList={() => setIsMobileChatOpen(false)}
-              />
+              {/* BÊN PHẢI: Khung chat hoặc Màn hình chào mừng */}
+              {activeChat.id ? (
+                <ChatWindow
+                  messages={messages}
+                  isTyping={isTyping}
+                  activeChatName={activeChat.name}
+                  onSendMessage={handleSendMessage}
+                  onlineCount={onlineUsers.size}
+                  onTyping={handleTyping}
+                  onUploadFile={handleUploadFile}
+                  isMobileChatOpen={isMobileChatOpen}
+                  onBackToList={() => setIsMobileChatOpen(false)}
+                  onLoadMore={loadMoreMessages}
+                  hasMore={hasMore}
+                  isLoadingMore={isLoadingMore}
+                />
+              ) : (
+                /* MÀN HÌNH TRỐNG KHI CHƯA CHỌN PHÒNG CHAT */
+                <div
+                  className={`col-12 col-md-7 col-lg-8 d-flex flex-column justify-content-center align-items-center h-100 bg-light ${!isMobileChatOpen ? 'd-none d-md-flex' : ''}`}
+                >
+                  <div className="text-center text-muted">
+                    <div className="mb-3">
+                      <i className="fas fa-comments text-secondary" style={{ fontSize: "4rem", opacity: 0.5 }}></i>
+                    </div>
+                    <h4>Chào mừng đến với Chatify!</h4>
+                    <p>Hãy chọn một phòng chat bên trái để bắt đầu trò chuyện.</p>
+                  </div>
+                </div>
+              )}
 
             </div>
           </div>
