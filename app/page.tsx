@@ -5,6 +5,8 @@ import { ConversationList } from './chat/ConversationList';
 import { ChatWindow } from './chat/ChatWindow';
 import api from './utils/api';
 import useWebSocket from 'react-use-websocket';
+import { CreateGroupModal } from './chat/CreateGroupModal';
+import { AddMemberModal } from './chat/AddMemberModal';
 
 export default function ChatPage() {
 
@@ -21,35 +23,41 @@ export default function ChatPage() {
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
 
   //Lay thong tin chung thuc tu local storage
   const token = typeof window !== "undefined" ? localStorage.getItem("jwt_token") : "";
   const myUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") : "";
 
   //Lay danh sach phong chat
+  // Đưa hàm fetchConversations ra ngoài để dùng chung
+  const fetchConversations = async () => {
+    try {
+      const res = await api.get('/api/conversations');
+
+      const formattedData = res.data.map((conv: any) => {
+        const timeString = new Date(conv.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        return {
+          id: conv.id,
+          name: conv.title || "Phòng chat chưa đặt tên",
+          lastMessage: "Bấm để xem tin nhắn...",
+          time: timeString,
+          avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
+          isOnline: false // Chỉnh lại false mặc định, để tí gọi API online-users nó tự sáng đèn
+        };
+      });
+
+      setConversations(formattedData);
+    } catch (error) {
+      console.error("Lỗi lấy danh sách phòng chat:", error);
+    }
+  };
+
+  // Vẫn gọi hàm này 1 lần khi trang web vừa bật lên
   useEffect(() => {
-    const fetchConversations = async () => {
-      try {
-        const res = await api.get('/api/conversations');
-
-        const formattedData = res.data.map((conv: any) => {
-          const timeString = new Date(conv.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-          return {
-            id: conv.id,
-            name: conv.title || "Phòng chat chưa đặt tên",
-            lastMessage: "Bấm để xem tin nhắn...",
-            time: timeString,
-            avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
-            isOnline: true
-          };
-        });
-
-        setConversations(formattedData);
-      } catch (error) {
-        console.error("Lỗi lấy danh sách phòng chat:", error);
-      }
-    };
     fetchConversations();
   }, []);
 
@@ -148,23 +156,6 @@ export default function ChatPage() {
     if (lastJsonMessage) {
       const data: any = lastJsonMessage;
 
-      // xử lý luồng trạng thái Online/Offline
-      if (data.type === "STATUS") {
-        // Chỉ quan tâm trạng thái của người khác, không phải của mình
-        if (data.user_id !== myUserId) {
-          setOnlineUsers(prev => {
-            const newSet = new Set(prev);
-            if (data.is_online) {
-              newSet.add(data.user_id); // Có người vào -> Thêm vào danh sách
-            } else {
-              newSet.delete(data.user_id); // Có người thoát -> Xóa khỏi danh sách
-            }
-            return newSet;
-          });
-        }
-        return;
-      }
-
       // Xử lý luồng Đang gõ
       if (data.type === "TYPING") {
         // Chỉ hiện chữ "Đang gõ" nếu người gõ không phải là mình
@@ -248,68 +239,76 @@ export default function ChatPage() {
     }
   };
 
+  const test = () => {};
+
   return (
     <section
       className="d-flex justify-content-center align-items-center vh-100 overflow-hidden"
       style={{ backgroundColor: "#d6f0f4" }}
     >
-      {/* p-0 (Mobile): Không có padding, tràn viền */}
-      {/* p-md-4 (PC): Thêm padding 24px để tạo lề */}
       <div
         className="w-100 h-100 p-0 p-md-4 d-flex justify-content-center"
         style={{ maxWidth: "1400px" }}
       >
-        <div
-          className="card shadow-lg w-100 h-100 border-0"
-          id="chat3"
-          style={{ overflow: "hidden" }}
-        >
-          {/* Thêm p-0 cho mobile, p-md-3 cho PC */}
-          <div className="card-body h-100 p-0 p-md-3">
-            <div className="row h-100 g-0">
+        <div className="row h-100 w-100 g-3">
 
-              {/* BÊN TRÁI: Danh sách phòng chat */}
-              <ConversationList
-                conversations={conversations}
-                onSelectConversation={handleSelectConversation}
-                isMobileChatOpen={isMobileChatOpen}
-              />
+          {/* BÊN TRÁI: Danh sách phòng chat */}
+          <ConversationList
+            conversations={conversations}
+            onSelectConversation={handleSelectConversation}
+            isMobileChatOpen={isMobileChatOpen}
+            onOpenCreateModal={() => setShowCreateModal(true)}
+          />
 
-              {/* BÊN PHẢI: Khung chat hoặc Màn hình chào mừng */}
-              {activeChat.id ? (
-                <ChatWindow
-                  messages={messages}
-                  isTyping={isTyping}
-                  activeChatName={activeChat.name}
-                  onSendMessage={handleSendMessage}
-                  onlineCount={onlineUsers.size}
-                  onTyping={handleTyping}
-                  onUploadFile={handleUploadFile}
-                  isMobileChatOpen={isMobileChatOpen}
-                  onBackToList={() => setIsMobileChatOpen(false)}
-                  onLoadMore={loadMoreMessages}
-                  hasMore={hasMore}
-                  isLoadingMore={isLoadingMore}
-                />
-              ) : (
-                /* MÀN HÌNH TRỐNG KHI CHƯA CHỌN PHÒNG CHAT */
-                <div
-                  className={`col-12 col-md-7 col-lg-8 d-flex flex-column justify-content-center align-items-center h-100 bg-light ${!isMobileChatOpen ? 'd-none d-md-flex' : ''}`}
-                >
-                  <div className="text-center text-muted">
-                    <div className="mb-3">
-                      <i className="fas fa-comments text-secondary" style={{ fontSize: "4rem", opacity: 0.5 }}></i>
-                    </div>
-                    <h4>Chào mừng đến với Chatify!</h4>
-                    <p>Hãy chọn một phòng chat bên trái để bắt đầu trò chuyện.</p>
+          {/* BÊN PHẢI: Khung chat hoặc Màn hình chào mừng */}
+          {activeChat.id ? (
+            <ChatWindow
+              messages={messages}
+              isTyping={isTyping}
+              myUserId={myUserId}
+              activeChatName={activeChat.name}
+              onSendMessage={handleSendMessage}
+              onlineCount={onlineUsers.size}
+              onTyping={handleTyping}
+              onUploadFile={handleUploadFile}
+              isMobileChatOpen={isMobileChatOpen}
+              onBackToList={() => setIsMobileChatOpen(false)}
+              onLoadMore={loadMoreMessages}
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
+              activeChatId={activeChat.id}
+              showAddMemberModal={() => setOpenAddMemberModal(true)}
+            />
+          ) : (
+            <div className={`col-12 col-md-7 col-lg-8 ${!isMobileChatOpen ? 'd-none d-md-block' : ''}`}>
+              <div className="d-flex flex-column justify-content-center align-items-center 
+              h-100 bg-white rounded-4 border shadow-sm">
+                <div className="text-center text-muted">
+                  <div className="mb-3">
+                    <i className="fas fa-comments text-secondary" style={{ fontSize: "4rem", opacity: 0.5 }}></i>
                   </div>
+                  <h4>Chào mừng đến với Chatify!</h4>
+                  <p>Hãy chọn một phòng chat bên trái để bắt đầu trò chuyện.</p>
                 </div>
-              )}
-
+              </div>
             </div>
-          </div>
+          )}
+
         </div>
       </div>
+      <CreateGroupModal 
+        show={showCreateModal} 
+        myUserId={myUserId || ""} 
+        onClose={() => setShowCreateModal(false)} 
+        onCreated={fetchConversations} // Load lại danh sách khi tạo xong
+      />
+      <AddMemberModal
+      show={openAddMemberModal}
+      myUserId={myUserId || ""}
+      onClose={() => setOpenAddMemberModal(false)}
+      onCreated={() => test}
+      />
+      
     </section>
   );
 }

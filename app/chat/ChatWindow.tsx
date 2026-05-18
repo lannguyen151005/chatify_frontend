@@ -1,6 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MessageItem } from './items/MessageItem';
 import { ChatInput } from './ChatInput';
+import api from '../utils/api';
+import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
+import { GroupMembersModal } from './GroupMembersModal';
+import { useRouter } from 'next/navigation';
 
 interface ChatWindowProps {
   messages: any[];
@@ -12,118 +17,194 @@ interface ChatWindowProps {
   isMobileChatOpen: boolean;
   onBackToList: () => void;
   onlineCount?: number;
-  
-  // Thêm các prop phân trang từ ChatPage truyền xuống
   onLoadMore: () => Promise<void>;
   hasMore: boolean;
   isLoadingMore: boolean;
+  activeChatId?: string;
+  myUserId: string | null;
+  showAddMemberModal: () => void
 }
 
-export const ChatWindow = ({ 
-  messages, isTyping, activeChatName, onSendMessage, onTyping, 
+export const ChatWindow = ({
+  messages, isTyping, activeChatName, onSendMessage, onTyping,
   onUploadFile, isMobileChatOpen, onBackToList, onlineCount,
-  onLoadMore, hasMore, isLoadingMore 
+  onLoadMore, hasMore, isLoadingMore, activeChatId, myUserId,
+  showAddMemberModal
 }: ChatWindowProps) => {
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null); // Khai báo ref để điều khiển thanh cuộn
-  
-  // Dùng các Ref này để ghi nhớ trạng thái tin nhắn cuối cùng, chống cuộn bừa bãi
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   const lastMsgIdRef = useRef<string | number | undefined>(undefined);
   const prevChatNameRef = useRef<string>("");
 
-  // 1. Thuật toán tự động cuộn thông minh (Chỉ cuộn xuống khi có tin nhắn MỚI xuất hiện)
+  // Các State mới để quản lý Menu thông tin và Modal thành viên
+  const [isInfoMenuOpen, setIsInfoMenuOpen] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+
+
   useEffect(() => {
     if (messages.length === 0) return;
-    
+
     const lastMessage = messages[messages.length - 1];
-    // Kiểm tra xem tin nhắn cuối cùng có phải tin nhắn mới tinh không (hoặc tin ảo chưa có id)
     const hasNewMessage = lastMessage?.id !== lastMsgIdRef.current || !lastMessage?.id;
     const isNewChat = activeChatName !== prevChatNameRef.current;
 
-    // Nếu đổi phòng chat hoặc có tin nhắn mới tinh -> Cuộn xuống đáy khung chat
     if (isNewChat || hasNewMessage) {
       messagesEndRef.current?.scrollIntoView({ behavior: isNewChat ? "auto" : "smooth" });
     }
 
-    // Ghi nhớ lại dấu vết cho lần render sau
     lastMsgIdRef.current = lastMessage?.id;
     prevChatNameRef.current = activeChatName;
   }, [messages, isTyping, activeChatName]);
 
-  // 2. Thuật toán bắt sự kiện cuộn lên đỉnh (Scroll Up to Load More)
   const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    
-    // Khi người dùng cuộn kịch lên đỉnh (scrollTop === 0) và hệ thống báo vẫn còn tin cũ
     if (target.scrollTop === 0 && hasMore && !isLoadingMore) {
-      
-      // BƯỚC THẦN THÁNH: Lưu lại tổng chiều cao (scrollHeight) của khung chat TRƯỚC KHI TẢI
       const oldScrollHeight = target.scrollHeight;
-      
-      await onLoadMore(); // Gọi hàm lên ChatPage tải tin cũ về
-      
-      // Sau khi tin cũ chèn vào đầu mảng, tính toán lại độ lệch chiều cao và bù đắp vị trí cuộn
+      await onLoadMore();
       setTimeout(() => {
         if (scrollContainerRef.current) {
           const newScrollHeight = scrollContainerRef.current.scrollHeight;
-          // Vị trí cuộn mới = Chiều cao mới - Chiều cao cũ. Giúp màn hình đứng im re!
           scrollContainerRef.current.scrollTop = newScrollHeight - oldScrollHeight;
         }
       }, 30);
     }
   };
 
+  const handleExitGroup = async () => {
+    try {
+      setIsInfoMenuOpen(false);
+      const result = await Swal.fire(
+        {
+          title: "Thoát nhóm?",
+          icon: 'question',
+          text: "Bạn chắc chắn muốn rời khỏi nhóm chứ?",
+          showCancelButton: true,
+          confirmButtonText: "Xác nhận",
+          cancelButtonText: "Hủy"
+        }
+      );
+      if (result.isConfirmed) {
+        const res = await api.delete(`/api/conversations/${activeChatId}/members/${myUserId}`);
+        if (res.status === 200) {
+          toast.success("Đã thoát nhóm thành công!");
+          setTimeout(
+            () => {
+              window.location.reload();
+            },1000
+          )
+        }
+      }
+    } catch (error: any) {
+      console.log(error.response);
+      toast.error("Thoát nhóm thất bại!");
+    }
+  }
+
   return (
-    <div className={`col-12 col-md-7 col-lg-8 d-flex flex-column h-100 ${!isMobileChatOpen ? 'd-none d-md-flex' : ''}`}>
+    <div className={`col-12 col-md-7 col-lg-8 h-100 ${!isMobileChatOpen ? 'd-none d-md-block' : ''}`}>
+      <div className="d-flex flex-column h-100 bg-white rounded-4 shadow-sm overflow-hidden border">
 
-      {/* HEADER (Hiện trên cả Mobile và PC) */}
-      <div className="d-flex align-items-center p-3 border-bottom bg-light">
-        <button className="btn btn-sm btn-outline-secondary me-3 d-md-none" onClick={onBackToList}>
-          <i className="fas fa-chevron-left"></i>
-        </button>
-        <div>
-          <h5 className="mb-0 fw-bold">{activeChatName}</h5>
-          {onlineCount && onlineCount > 0 ? (
-            <small className="text-success fw-bold d-flex align-items-center">
-              <span className="bg-success rounded-circle me-1" style={{ width: "8px", height: "8px", display: "inline-block" }}></span>
-              {onlineCount === 1 ? "Đang hoạt động" : `${onlineCount + 1} người đang hoạt động`}
-            </small>
-          ) : (
-            <small className="text-muted d-flex align-items-center">
-              <span className="bg-secondary rounded-circle me-1" style={{ width: "8px", height: "8px", display: "inline-block" }}></span>
-              Ngoại tuyến
-            </small>
-          )}
-        </div>
-      </div>
-
-      {/* BONG BÓNG TIN NHẮN: Đã thêm gắn ref và hàm onScroll */}
-      <div 
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="p-3 flex-grow-1" 
-        style={{ overflowY: "auto", backgroundColor: "#f8f9fa" }}
-      >
-        {/* Vòng quay Loading nhỏ xinh xuất hiện ở đỉnh khi đang tải tin nhắn cũ */}
-        {isLoadingMore && (
-          <div className="text-center my-2 text-muted small d-flex align-items-center justify-content-center">
-            <div className="spinner-border spinner-border-sm text-secondary me-2" role="status"></div>
-            Đang tải tin nhắn cũ hơn...
+        {/* HEADER (Hiện trên cả Mobile và PC) */}
+        <div className="d-flex align-items-center p-3 border-bottom bg-light position-relative">
+          <button className="btn btn-sm btn-outline-secondary me-3 d-md-none" onClick={onBackToList}>
+            <i className="fas fa-chevron-left"></i>
+          </button>
+          <div>
+            <h5 className="mb-0 fw-bold">{activeChatName}</h5>
+            {onlineCount && onlineCount > 0 ? (
+              <small className="text-success fw-bold d-flex align-items-center">
+                <span className="bg-success rounded-circle me-1" style={{ width: "8px", height: "8px", display: "inline-block" }}></span>
+                {onlineCount === 1 ? "Đang hoạt động" : `${onlineCount + 1} người đang hoạt động`}
+              </small>
+            ) : (
+              <small className="text-muted d-flex align-items-center">
+                <span className="bg-secondary rounded-circle me-1" style={{ width: "8px", height: "8px", display: "inline-block" }}></span>
+                Ngoại tuyến
+              </small>
+            )}
           </div>
-        )}
 
-        {messages.map((msg, index) => (
-          <MessageItem key={index} {...msg} />
-        ))}
-        {isTyping && <div className="text-muted small ms-3 mt-2 font-italic">Ai đó đang gõ...</div>}
-        <div ref={messagesEndRef} />
+          <div className="ms-auto position-relative d-flex align-items-center">
+            <button
+              className="btn btn-link text-secondary p-0"
+              onClick={() => setIsInfoMenuOpen(!isInfoMenuOpen)}
+              style={{ fontSize: "1.3rem" }}
+            >
+              <i className="fas fa-info-circle"></i>
+            </button>
+
+            {/* DROPDOWN MENU THÔNG TIN */}
+            {isInfoMenuOpen && (
+              <>
+                <div
+                  style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1040 }}
+                  onClick={() => setIsInfoMenuOpen(false)}
+                ></div>
+                <ul
+                  className="dropdown-menu show shadow-sm border-0 rounded-3"
+                  style={{ position: 'absolute', top: '35px', right: '0px', left: 'auto', zIndex: 1050, minWidth: '160px' }}
+                >
+                  <li>
+                    <button className="dropdown-item py-2" onClick={() => { setIsInfoMenuOpen(false); alert("Tính năng tùy chỉnh nhóm sẽ phát triển sau!"); }}>
+                      <i className="fas fa-sliders-h me-3 text-primary"></i> Tùy chỉnh nhóm
+                    </button>
+                  </li>
+                  <li>
+                    <button className="dropdown-item py-2" onClick={() => { setIsInfoMenuOpen(false); setShowMembersModal(true); }}>
+                      <i className="fas fa-users me-3 text-success"></i> Thành viên
+                    </button>
+                  </li>
+                  <li><hr className="dropdown-divider" /></li>
+                  <li>
+                    <button className="dropdown-item py-2 text-danger fw-bold" onClick={handleExitGroup}>
+                      <i className="fa-solid fa-door-open me-3"></i>Rời khỏi nhóm
+                    </button>
+                  </li>
+                </ul>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* BONG BÓNG TIN NHẮN */}
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="p-3 flex-grow-1"
+          style={{ overflowY: "auto", backgroundColor: "#f8f9fa" }}
+        >
+          {isLoadingMore && (
+            <div className="text-center my-2 text-muted small d-flex align-items-center justify-content-center">
+              <div className="spinner-border spinner-border-sm text-secondary me-2" role="status"></div>
+              Đang tải tin nhắn cũ hơn...
+            </div>
+          )}
+
+          {messages.map((msg, index) => (
+            <MessageItem key={index} {...msg} />
+          ))}
+          {isTyping && <div className="text-muted small ms-3 mt-2 font-italic">Ai đó đang gõ...</div>}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Ô NHẬP TIN NHẮN */}
+        <div className="mt-auto bg-white border-top">
+          <ChatInput onSendMessage={onSendMessage} onTyping={onTyping} onUploadFile={onUploadFile} />
+        </div>
+
       </div>
 
-      {/* Ô NHẬP TIN NHẮN */}
-      <div className="mt-auto bg-white border-top">
-        <ChatInput onSendMessage={onSendMessage} onTyping={onTyping} onUploadFile={onUploadFile} />
-      </div>
+      {/* POPUP XEM VÀ QUẢN LÝ THÀNH VIÊN NHÓM CHAT */}
+      <GroupMembersModal
+        show={showMembersModal}
+        onClose={() => setShowMembersModal(false)}
+        activeChatId={activeChatId || ""}
+        openAddMemberModal={() => showAddMemberModal()}
+      />
     </div>
   );
 };
+
+

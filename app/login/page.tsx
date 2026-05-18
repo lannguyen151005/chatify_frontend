@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../utils/api'; 
 import { jwtDecode } from 'jwt-decode';
+import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,6 +35,8 @@ export default function LoginPage() {
         const decoded: any = jwtDecode(token);
         localStorage.setItem('user_id', decoded.sub); // Lưu ID để biết ai đang chat
         
+        toast.success("Đăng nhập thành công!");
+
         // Chuyển hướng sang trang Chat
         router.push('/'); 
       } else {
