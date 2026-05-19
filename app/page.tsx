@@ -10,14 +10,18 @@ import { AddMemberModal } from './chat/AddMemberModal';
 import { UpdateProfileModal } from './chat/UpdateProfileModal';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
 
 export default function ChatPage() {
+
+  const router = useRouter();
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState<any[]>([]);
 
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
-  const [activeChat, setActiveChat] = useState({ id: "", name: "" , avatar_url: ""});
+  const [activeChat, setActiveChat] = useState({ id: "", name: "", avatar_url: "" });
   const [isTyping, setIsTyping] = useState(false);
 
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set);
@@ -35,6 +39,16 @@ export default function ChatPage() {
   const token = typeof window !== "undefined" ? localStorage.getItem("jwt_token") : "";
   const myUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") : "";
 
+  useEffect(() => {
+    const token = localStorage.getItem("jwt_token");
+    if (!token) {
+      router.push('/auth');
+    } else {
+
+      setIsAuthLoading(false);
+    }
+  }, [router]);
+
   const fetchConversations = async () => {
     try {
       const res = await api.get('/api/conversations');
@@ -47,7 +61,7 @@ export default function ChatPage() {
           lastMessage: "Bấm để xem tin nhắn...",
           time: timeString,
           avatar: conv.avatar_url,
-          isOnline: false 
+          isOnline: false
         };
       });
 
@@ -58,7 +72,7 @@ export default function ChatPage() {
   };
 
   const handleDeleteConversation = async (e: React.MouseEvent, id: string, name: string) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
 
     try {
       // Lấy danh sách thành viên để kiểm tra quyền của mình
@@ -69,7 +83,7 @@ export default function ChatPage() {
 
       // Tùy biến thông báo dựa theo chức vụ
       const title = isAdmin ? "Xóa vĩnh viễn nhóm?" : "Thoát khỏi nhóm?";
-      const text = isAdmin 
+      const text = isAdmin
         ? `Bạn là Quản trị viên. Bạn có chắc chắn muốn XÓA VĨNH VIỄN nhóm "${name}" không? Toàn bộ tin nhắn sẽ bị xóa.`
         : `Bạn có chắc chắn muốn THOÁT KHỎI nhóm "${name}" không?`;
 
@@ -111,8 +125,10 @@ export default function ChatPage() {
   };
 
   useEffect(() => {
-    fetchConversations();
-  }, []);
+    if (!isAuthLoading) {
+      fetchConversations();
+    }
+  }, [isAuthLoading]);
 
   const loadMoreMessages = async () => {
     if (isLoadingMore || !hasMore || !activeChat.id) return;
@@ -132,9 +148,9 @@ export default function ChatPage() {
 
       if (res.data.length > 0) {
         const olderMessages = res.data.map((msg: any) => {
-   
+
           const sender = membersRef.current.find((m: any) => m.user_id === msg.user_id);
-          
+
           return {
             id: msg.id,
             content: msg.content,
@@ -156,7 +172,7 @@ export default function ChatPage() {
   };
 
   const handleSelectConversation = async (id: string, name: string, avatar: string) => {
-    setActiveChat({ id, name,  avatar_url: avatar});
+    setActiveChat({ id, name, avatar_url: avatar });
     setIsMobileChatOpen(true);
     setOnlineUsers(new Set);
 
@@ -240,7 +256,7 @@ export default function ChatPage() {
           id: data.id,
           content: data.content,
           time: new Date().toLocaleTimeString(),
-          isMe: false, 
+          isMe: false,
           avatar: sender?.avatar_url || "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
           attachmentUrl: data.attachment_url
         };
@@ -297,6 +313,16 @@ export default function ChatPage() {
       alert("Lỗi tải ảnh lên!");
     }
   };
+  if (isAuthLoading) {
+    return (
+      <div className="vh-100 d-flex justify-content-center align-items-center" style={{ backgroundColor: "#d6f0f4" }}>
+        <div className="text-center">
+          <div className="spinner-border text-primary mb-2" role="status"></div>
+          <p className="text-muted small fw-bold">Đang xác thực tài khoản...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <section
@@ -357,7 +383,7 @@ export default function ChatPage() {
         show={showCreateModal}
         myUserId={myUserId || ""}
         onClose={() => setShowCreateModal(false)}
-        onCreated={fetchConversations} 
+        onCreated={fetchConversations}
       />
       <AddMemberModal
         show={openAddMemberModal}
@@ -370,7 +396,7 @@ export default function ChatPage() {
         myUserId={myUserId || ""}
         onClose={() => setShowUpdateProfileModal(false)}
       />
-    
+
     </section>
   );
 }

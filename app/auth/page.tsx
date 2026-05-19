@@ -57,13 +57,31 @@ export default function LoginPage() {
   };
 
   return (
-    <section className="vh-100 d-flex justify-content-center align-items-center" style={{ backgroundColor: "#d6f0f4" }}>
+    <section 
+      className="vh-100 d-flex justify-content-center align-items-center" 
+      style={{ 
+        // 🌟 GẮN ẢNH BACKGROUND TẠI ĐÂY
+        backgroundImage: "url('/background.png')", 
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundColor: "#d6f0f4" // Màu nền dự phòng (theo đúng màu gốc của bạn)
+      }}
+    >
       <div className="container">
         <div className="row justify-content-center">
           <div className="col-12 col-md-8 col-lg-6 col-xl-5">
-            <div className="card shadow-lg border-0" style={{ borderRadius: "1rem" }}>
-              <div className="card-body p-5 text-center">
-
+            <div 
+              className="card shadow-lg border-0" 
+              style={{ 
+                borderRadius: "1rem",
+                // 🌟 HIỆU ỨNG KÍNH MỜ CHO CARD
+                backgroundColor: "rgba(255, 255, 255, 0.85)", 
+                backdropFilter: "blur(8px)" 
+              }}
+            >
+              <div className="card-body p-5 pt-2 text-center">
+                <img src="/logo.png" alt="logo" className='rounded-circle' style={{width: "120px", height: "120px", objectFit: "cover", imageRendering: "auto"}}/>
                 <h3 className="mb-4 fw-bold text-primary">
                   {isLoginMode ? "Đăng Nhập" : "Đăng Ký Tài Khoản"}
                 </h3>
@@ -87,18 +105,22 @@ export default function LoginPage() {
                       required
                     />
                   </div>
-                  {isLoginMode ? <></> :
-                    <div>
+
+                  {isLoginMode ? null : (
+                    <div className="form-outline mb-4 text-start">
+                      <label className="form-label fw-bold">Email</label>
                       <input
-                      type="text"
-                      name="email"
-                      className="form-control form-control-lg bg-light"
-                      placeholder="Nhập email..."
-                      value={formDataRegister.email}
-                      onChange={handleChange}
-                      required
-                    />
-                    </div>}
+                        type="email"
+                        name="email"
+                        className="form-control form-control-lg bg-light"
+                        placeholder="Nhập email..."
+                        value={formDataRegister.email}
+                        onChange={handleChange}
+                        required
+                      />
+                    </div>
+                  )}
+
                   <div className="form-outline mb-4 text-start">
                     <label className="form-label fw-bold">Mật khẩu</label>
                     <input
