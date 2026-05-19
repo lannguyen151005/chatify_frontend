@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
+import toast from 'react-hot-toast';
 
 interface User {
     id: string;
@@ -9,11 +10,12 @@ interface User {
 interface AddMemberProps {
     show: boolean;
     onClose: () => void;
-    onCreated: () => void;
+
     myUserId: string;
+    activeChatId: string;
 }
 
-export const AddMemberModal = ({ show, onClose, onCreated, myUserId }: AddMemberProps) => {
+export const AddMemberModal = ({ show, onClose, myUserId ,activeChatId}: AddMemberProps) => {
     const [users, setUsers] = useState<User[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
@@ -23,8 +25,14 @@ export const AddMemberModal = ({ show, onClose, onCreated, myUserId }: AddMember
         if (show) {
             const fetchUsers = async () => {
                 try {
-                    const res = await api.get('/api/users'); // Giả định backend có endpoint này
-                    setUsers(res.data.filter((u: User) => u.id !== myUserId));
+                    const [usersRes, membersRes] = await Promise.all([
+                        api.get('/api/users'),
+                        api.get(`/api/conversations/${activeChatId}/members`)
+                    ]);
+
+                    const currrentMemberIds = new Set(membersRes.data.map((m: any) => m.user_id));
+
+                    setUsers(usersRes.data.filter((u: User) => u.id !== myUserId && !currrentMemberIds.has(u.id)));
                 } catch (error) {
                     console.error("Lỗi lấy danh sách người dùng:", error);
                 }
@@ -43,18 +51,23 @@ export const AddMemberModal = ({ show, onClose, onCreated, myUserId }: AddMember
     };
 
     const handleCreate = async () => {
-        if (selectedUserIds.size === 0) return alert("Vui lòng chọn ít nhất 1 người bạn!");
         
         try {
-            await api.post('/api/conversations', {
+            const res = await api.post(`/api/conversations/${activeChatId}/members`, {
                 memberIds: Array.from(selectedUserIds)
             });
-            onCreated(); // Load lại danh sách phòng chat
+            if(res.data.length === 0){
+                toast.success("Vui lòng chọn ít nhất 1 người!",{
+                icon: (<i className="fa-solid fa-person-circle-exclamation text-warning"></i>)
+            })
+            return;
+            }   
             onClose();   // Đóng modal
+            toast.success("Thêm thành viên thành công!");
             setSelectedUserIds(new Set());
         } catch (error:any) {
-        
             console.log(error.response);
+            toast.error("Thêm thành viên thất bại!")
         }
     };
 

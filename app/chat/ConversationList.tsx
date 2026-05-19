@@ -9,9 +9,10 @@ interface ConversationListProps {
   onSelectConversation: (id: string, name: string) => void;
   isMobileChatOpen: boolean;
   onOpenCreateModal: () => void;
+  onOpenUpdateProfileModal: () => void;
 }
 
-export const ConversationList = ({ conversations, onSelectConversation, isMobileChatOpen, onOpenCreateModal }: ConversationListProps) => {
+export const ConversationList = ({ conversations, onSelectConversation, isMobileChatOpen, onOpenCreateModal, onOpenUpdateProfileModal }: ConversationListProps) => {
   // State quản lý việc mở/đóng Menu
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const router = useRouter();
@@ -37,7 +38,7 @@ export const ConversationList = ({ conversations, onSelectConversation, isMobile
 
       toast.success("Đăng xuất thành công!");
 
-      router.push("/login");
+      router.push("/auth");
     }
   };
 
@@ -70,7 +71,7 @@ export const ConversationList = ({ conversations, onSelectConversation, isMobile
                 style={{ position: 'absolute', top: '65px', left: '15px', zIndex: 1050 }}
               >
                 <li>
-                  <button className="dropdown-item py-2" onClick={() => { setIsMenuOpen(false); alert("Chức năng đổi thông tin đang phát triển!"); }}>
+                  <button className="dropdown-item py-2" onClick={() => { setIsMenuOpen(false); onOpenUpdateProfileModal(); }}>
                     <i className="fas fa-user-edit me-3 text-primary"></i>
                     Thay đổi thông tin
                   </button>

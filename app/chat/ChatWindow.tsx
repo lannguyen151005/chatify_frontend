@@ -196,7 +196,7 @@ export const ChatWindow = ({
 
       </div>
 
-      {/* POPUP XEM VÀ QUẢN LÝ THÀNH VIÊN NHÓM CHAT */}
+    
       <GroupMembersModal
         show={showMembersModal}
         onClose={() => setShowMembersModal(false)}

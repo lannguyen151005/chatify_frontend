@@ -2,19 +2,22 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '../utils/api'; 
+import api from '../utils/api';
 import { jwtDecode } from 'jwt-decode';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const router = useRouter();
   const [isLoginMode, setIsLoginMode] = useState(true); // true: Đăng nhập, false: Đăng ký
-  const [formData, setFormData] = useState({ username: '', password: '' });
+  const [formDataLogin, setFormDataLogin] = useState({ username: '', password: '' });
+  const [formDataRegister, setFormDataRegister] = useState({username: '', email: '', password: ''});
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    isLoginMode?
+    setFormDataLogin({ ...formDataLogin, [e.target.name]: e.target.value }):
+    setFormDataRegister({...formDataRegister, [e.target.name]: e.target.value});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,8 +28,8 @@ export default function LoginPage() {
     try {
       if (isLoginMode) {
         // GỌI API ĐĂNG NHẬP
-        const res = await api.post('/auth/login', formData);
-        
+        const res = await api.post('/api/auth/login', formDataLogin);
+
         const token = res.data.token;
 
         localStorage.setItem('jwt_token', token);
@@ -34,14 +37,14 @@ export default function LoginPage() {
         //Giai ma jwt de lay user_id
         const decoded: any = jwtDecode(token);
         localStorage.setItem('user_id', decoded.sub); // Lưu ID để biết ai đang chat
-        
+
         toast.success("Đăng nhập thành công!");
 
         // Chuyển hướng sang trang Chat
-        router.push('/'); 
+        router.push('/');
       } else {
         // GỌI API ĐĂNG KÝ
-        await api.post('/api/auth/register', formData);
+        await api.post('/api/auth/register', formDataRegister);
         alert('Đăng ký thành công! Vui lòng đăng nhập.');
         setIsLoginMode(true); // Chuyển về form đăng nhập
       }
@@ -74,32 +77,43 @@ export default function LoginPage() {
                 <form onSubmit={handleSubmit}>
                   <div className="form-outline mb-4 text-start">
                     <label className="form-label fw-bold">Tên đăng nhập</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       name="username"
-                      className="form-control form-control-lg bg-light" 
+                      className="form-control form-control-lg bg-light"
                       placeholder="Nhập username..."
-                      value={formData.username}
+                      value={isLoginMode?formDataLogin.username:formDataRegister.username}
                       onChange={handleChange}
-                      required 
+                      required
                     />
                   </div>
-
+                  {isLoginMode ? <></> :
+                    <div>
+                      <input
+                      type="text"
+                      name="email"
+                      className="form-control form-control-lg bg-light"
+                      placeholder="Nhập email..."
+                      value={formDataRegister.email}
+                      onChange={handleChange}
+                      required
+                    />
+                    </div>}
                   <div className="form-outline mb-4 text-start">
                     <label className="form-label fw-bold">Mật khẩu</label>
-                    <input 
-                      type="password" 
+                    <input
+                      type="password"
                       name="password"
-                      className="form-control form-control-lg bg-light" 
+                      className="form-control form-control-lg bg-light"
                       placeholder="Nhập mật khẩu..."
-                      value={formData.password}
+                      value={isLoginMode?formDataLogin.password:formDataRegister.password}
                       onChange={handleChange}
-                      required 
+                      required
                     />
                   </div>
 
-                  <button 
-                    className="btn btn-primary btn-lg w-100 mb-3" 
+                  <button
+                    className="btn btn-primary btn-lg w-100 mb-3"
                     type="submit"
                     disabled={isLoading}
                   >
@@ -109,8 +123,8 @@ export default function LoginPage() {
 
                 <hr className="my-4" />
 
-                <button 
-                  className="btn btn-outline-secondary w-100" 
+                <button
+                  className="btn btn-outline-secondary w-100"
                   onClick={() => setIsLoginMode(!isLoginMode)}
                 >
                   {isLoginMode ? "Chưa có tài khoản? Đăng ký ngay" : "Đã có tài khoản? Đăng nhập"}

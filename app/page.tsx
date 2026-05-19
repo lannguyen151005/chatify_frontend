@@ -7,6 +7,7 @@ import api from './utils/api';
 import useWebSocket from 'react-use-websocket';
 import { CreateGroupModal } from './chat/CreateGroupModal';
 import { AddMemberModal } from './chat/AddMemberModal';
+import { UpdateProfileModal } from './chat/UpdateProfileModal';
 
 export default function ChatPage() {
 
@@ -27,6 +28,8 @@ export default function ChatPage() {
 
   const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
 
+  const [showUpdateProfileModal, setShowUpdateProfileModal] = useState(false);
+
   //Lay thong tin chung thuc tu local storage
   const token = typeof window !== "undefined" ? localStorage.getItem("jwt_token") : "";
   const myUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") : "";
@@ -46,7 +49,7 @@ export default function ChatPage() {
           lastMessage: "Bấm để xem tin nhắn...",
           time: timeString,
           avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
-          isOnline: false // Chỉnh lại false mặc định, để tí gọi API online-users nó tự sáng đèn
+          isOnline: false 
         };
       });
 
@@ -71,7 +74,7 @@ export default function ChatPage() {
     try {
       const [res] = await Promise.all([
         api.get(`/api/messages/${activeChat.id}?page=${nextPage}&size=20`),
-        new Promise(resolve => setTimeout(resolve, 1700)) 
+        new Promise(resolve => setTimeout(resolve, 1700))
       ]);
 
       if (res.data.length < 20) {
@@ -172,8 +175,7 @@ export default function ChatPage() {
         return;
       }
 
-      // Xử lý tin nhắn mới (CHAT)
-      // Nếu tin nhắn nhận được KHÔNG PHẢI của mình gửi thì mới cần render thêm (để tránh bị lặp 2 lần do mình đã render ở hàm handleSendMessage rồi)
+      
       if (data.user_id !== myUserId) {
         const incomingMsg = {
           id: data.id,
@@ -239,7 +241,7 @@ export default function ChatPage() {
     }
   };
 
-  const test = () => {};
+  const test = () => { };
 
   return (
     <section
@@ -258,6 +260,7 @@ export default function ChatPage() {
             onSelectConversation={handleSelectConversation}
             isMobileChatOpen={isMobileChatOpen}
             onOpenCreateModal={() => setShowCreateModal(true)}
+            onOpenUpdateProfileModal={() => setShowUpdateProfileModal(true)}
           />
 
           {/* BÊN PHẢI: Khung chat hoặc Màn hình chào mừng */}
@@ -296,19 +299,23 @@ export default function ChatPage() {
 
         </div>
       </div>
-      <CreateGroupModal 
-        show={showCreateModal} 
-        myUserId={myUserId || ""} 
-        onClose={() => setShowCreateModal(false)} 
+      <CreateGroupModal
+        show={showCreateModal}
+        myUserId={myUserId || ""}
+        onClose={() => setShowCreateModal(false)}
         onCreated={fetchConversations} // Load lại danh sách khi tạo xong
       />
       <AddMemberModal
-      show={openAddMemberModal}
-      myUserId={myUserId || ""}
-      onClose={() => setOpenAddMemberModal(false)}
-      onCreated={() => test}
+        show={openAddMemberModal}
+        myUserId={myUserId || ""}
+        onClose={() => setOpenAddMemberModal(false)}
+        activeChatId={activeChat.id}
       />
-      
+      <UpdateProfileModal
+        show={showUpdateProfileModal}
+        myUserId={myUserId || ""}
+        onClose={() => setShowUpdateProfileModal(false)}
+      />
     </section>
   );
 }

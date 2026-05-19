@@ -71,6 +71,7 @@ export const GroupMembersModal = ({ show, onClose, activeChatId , openAddMemberM
   };
 
   const handleAddMember = () => {
+    onClose();
     openAddMemberModal();
   }
 
