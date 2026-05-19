@@ -68,7 +68,7 @@ export const UpdateProfileModal = ({ show, onClose, myUserId }: UpdateProfileMod
             // 1. NẾU CÓ CHỌN ẢNH MỚI -> ĐẨY LÊN CLOUDINARY TRƯỚC BẰNG API CÓ SẴN
             if (avatarFile) {
                 const uploadData = new FormData();
-                uploadData.append("file", avatarFile); // Gửi đúng key "file" như lúc gửi ảnh chat
+                uploadData.append("file", avatarFile); 
 
                 const uploadRes = await api.post('/api/upload', uploadData, {
                     headers: { 'Content-Type': 'multipart/form-data' }

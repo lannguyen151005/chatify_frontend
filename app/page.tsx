@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ConversationList } from './chat/ConversationList';
 import { ChatWindow } from './chat/ChatWindow';
 import api from './utils/api';
@@ -8,6 +8,8 @@ import useWebSocket from 'react-use-websocket';
 import { CreateGroupModal } from './chat/CreateGroupModal';
 import { AddMemberModal } from './chat/AddMemberModal';
 import { UpdateProfileModal } from './chat/UpdateProfileModal';
+import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 
 export default function ChatPage() {
 
@@ -15,7 +17,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([]);
 
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
-  const [activeChat, setActiveChat] = useState({ id: "", name: "" });
+  const [activeChat, setActiveChat] = useState({ id: "", name: "" , avatar_url: ""});
   const [isTyping, setIsTyping] = useState(false);
 
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set);
@@ -25,30 +27,26 @@ export default function ChatPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-
   const [openAddMemberModal, setOpenAddMemberModal] = useState(false);
-
   const [showUpdateProfileModal, setShowUpdateProfileModal] = useState(false);
 
-  //Lay thong tin chung thuc tu local storage
+  const membersRef = useRef<any[]>([]);
+
   const token = typeof window !== "undefined" ? localStorage.getItem("jwt_token") : "";
   const myUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") : "";
 
-  //Lay danh sach phong chat
-  // Đưa hàm fetchConversations ra ngoài để dùng chung
   const fetchConversations = async () => {
     try {
       const res = await api.get('/api/conversations');
 
       const formattedData = res.data.map((conv: any) => {
         const timeString = new Date(conv.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
         return {
           id: conv.id,
           name: conv.title || "Phòng chat chưa đặt tên",
           lastMessage: "Bấm để xem tin nhắn...",
           time: timeString,
-          avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
+          avatar: conv.avatar_url,
           isOnline: false 
         };
       });
@@ -59,13 +57,64 @@ export default function ChatPage() {
     }
   };
 
-  // Vẫn gọi hàm này 1 lần khi trang web vừa bật lên
+  const handleDeleteConversation = async (e: React.MouseEvent, id: string, name: string) => {
+    e.stopPropagation(); 
+
+    try {
+      // Lấy danh sách thành viên để kiểm tra quyền của mình
+      const membersRes = await api.get(`/api/conversations/${id}/members`);
+      const me = membersRes.data.find((m: any) => m.user_id === myUserId);
+      const myRole = me?.group_role || 'MEMBER';
+      const isAdmin = myRole === 'ADMIN';
+
+      // Tùy biến thông báo dựa theo chức vụ
+      const title = isAdmin ? "Xóa vĩnh viễn nhóm?" : "Thoát khỏi nhóm?";
+      const text = isAdmin 
+        ? `Bạn là Quản trị viên. Bạn có chắc chắn muốn XÓA VĨNH VIỄN nhóm "${name}" không? Toàn bộ tin nhắn sẽ bị xóa.`
+        : `Bạn có chắc chắn muốn THOÁT KHỎI nhóm "${name}" không?`;
+
+      const result = await Swal.fire({
+        title: title,
+        text: text,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Xác nhận',
+        cancelButtonText: 'Hủy',
+        confirmButtonColor: '#d33'
+      });
+
+      // 3. Thực thi API tương ứng nếu xác nhận
+      if (result.isConfirmed) {
+        if (isAdmin) {
+          // Xóa luôn cuộc hội thoại
+          await api.delete(`/api/conversations/${id}`);
+          toast.success("Đã xóa nhóm thành công!");
+        } else {
+          // Thoát khỏi cuộc hội thoại (Xóa thành viên)
+          await api.delete(`/api/conversations/${id}/members/${myUserId}`);
+          toast.success("Đã rời nhóm thành công!");
+        }
+
+        // Tải lại danh sách nhóm bên trái
+        fetchConversations();
+
+        // NẾU NHÓM ĐANG MỞ CHÍNH LÀ NHÓM VỪA BỊ XÓA -> TẮT KHUNG CHAT BÊN PHẢI ĐI
+        if (activeChat.id === id) {
+          setActiveChat({ id: "", name: "", avatar_url: "" });
+          setMessages([]);
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Có lỗi xảy ra, vui lòng thử lại!");
+    }
+  };
+
   useEffect(() => {
     fetchConversations();
   }, []);
 
   const loadMoreMessages = async () => {
-    // nếu đang tải hoặc đã hết tin nhắn cũ hoặc chưa chọn chat thì bỏ qua
     if (isLoadingMore || !hasMore || !activeChat.id) return;
 
     setIsLoadingMore(true);
@@ -78,20 +127,24 @@ export default function ChatPage() {
       ]);
 
       if (res.data.length < 20) {
-        setHasMore(false); // Hết dữ liệu cũ
+        setHasMore(false);
       }
 
       if (res.data.length > 0) {
-        const olderMessages = res.data.map((msg: any) => ({
-          id: msg.id,
-          content: msg.content,
-          time: new Date(msg.created_at).toLocaleTimeString(),
-          isMe: msg.user_id === myUserId,
-          avatar: msg.user_id === myUserId ? "/my-avatar.png" : "/friend-avatar.png",
-          attachmentUrl: msg.attachment_url
-        }));
+        const olderMessages = res.data.map((msg: any) => {
+   
+          const sender = membersRef.current.find((m: any) => m.user_id === msg.user_id);
+          
+          return {
+            id: msg.id,
+            content: msg.content,
+            time: new Date(msg.created_at).toLocaleTimeString(),
+            isMe: msg.user_id === myUserId,
+            avatar: sender?.avatar_url || (msg.user_id === myUserId ? "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp" : "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"),
+            attachmentUrl: msg.attachment_url
+          };
+        });
 
-        //Nối tin nhắn cũ vào đầu mảng
         setMessages(prev => [...olderMessages, ...prev]);
         setPage(nextPage);
       }
@@ -102,31 +155,42 @@ export default function ChatPage() {
     }
   };
 
-  const handleSelectConversation = async (id: string, name: string) => {
-    setActiveChat({ id, name });
+  const handleSelectConversation = async (id: string, name: string, avatar: string) => {
+    setActiveChat({ id, name,  avatar_url: avatar});
     setIsMobileChatOpen(true);
     setOnlineUsers(new Set);
 
-    //Reset phân trang khi đổi phòng chat
     setPage(0);
     setHasMore(true);
     setIsLoadingMore(false);
 
+    // 🌟 1. Gọi API lấy thành viên nhóm trước và lưu vào membersRef
+    try {
+      const membersRes = await api.get(`/api/conversations/${id}/members`);
+      membersRef.current = membersRes.data;
+    } catch (error) {
+      console.error("Lỗi lấy danh sách thành viên:", error);
+      membersRef.current = [];
+    }
+
+    // 2. Lấy danh sách tin nhắn và map avatar vào
     try {
       const res = await api.get(`/api/messages/${id}?page=0&size=20`);
       const historyMessages = res.data.map(
-        (msg: any) => (
-          {
+        (msg: any) => {
+          // 🌟 TÌM KIẾM AVATAR TỪ DANH SÁCH THÀNH VIÊN
+          const sender = membersRef.current.find((m: any) => m.user_id === msg.user_id);
+
+          return {
             id: msg.id,
             content: msg.content,
             time: new Date(msg.created_at).toLocaleTimeString(),
             isMe: msg.user_id === myUserId,
-            avatar: msg.user_id === myUserId ? "/my-avatar.png" : "/friend-avatar.png",
+            avatar: sender?.avatar_url || (msg.user_id === myUserId ? "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp" : "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"),
             attachmentUrl: msg.attachment_url
-          }
-        )
+          };
+        }
       );
-      //Nếu dữ liệu trả về ít hơn 20 -> hết tin nhắn cũ
       if (res.data.length < 20) {
         setHasMore(false);
       }
@@ -137,9 +201,7 @@ export default function ChatPage() {
     }
 
     try {
-      //Lấy danh sách user online trong group
       const onlineRes = await api.get(`/api/conversations/${id}/online-users`);
-      //Lọc bỏ id của mình
       const otherOnlineUsers = onlineRes.data.filter((uid: string) => uid != myUserId);
       setOnlineUsers(new Set(otherOnlineUsers));
     } catch (error) {
@@ -147,21 +209,17 @@ export default function ChatPage() {
     }
   };
 
-  // url kết nối websocket chỉ kết nối khi đã chọn 1 phòng chat (có activeChat.id)
   const socketUrl = activeChat.id ? `ws://localhost:8080/chat/${activeChat.id}?token=${token}` : null;
 
   const { sendMessage: sendWsMessage, lastJsonMessage } = useWebSocket(socketUrl, {
     shouldReconnect: () => true,
   });
 
-  // Lắng nghe sự kiện đẩy về từ Quarkus (Hứng luồng dữ liệu)
   useEffect(() => {
     if (lastJsonMessage) {
       const data: any = lastJsonMessage;
 
-      // Xử lý luồng Đang gõ
       if (data.type === "TYPING") {
-        // Chỉ hiện chữ "Đang gõ" nếu người gõ không phải là mình
         if (data.senderId !== myUserId) {
           setIsTyping(true);
           setTimeout(() => setIsTyping(false), 3000);
@@ -169,20 +227,21 @@ export default function ChatPage() {
         return;
       }
 
-      // Xử lý luồng Đã xem
       if (data.type === "READ") {
         console.log(`User ${data.userId} đã xem tin nhắn`);
         return;
       }
 
-      
       if (data.user_id !== myUserId) {
+        // 🌟 LẤY AVATAR KHI CÓ TIN NHẮN REALTIME ĐẾN
+        const sender = membersRef.current.find((m: any) => m.user_id === data.user_id);
+
         const incomingMsg = {
           id: data.id,
           content: data.content,
           time: new Date().toLocaleTimeString(),
-          isMe: false, // Chắc chắn là của người kia
-          avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
+          isMe: false, 
+          avatar: sender?.avatar_url || "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
           attachmentUrl: data.attachment_url
         };
         setMessages(prev => [...prev, incomingMsg]);
@@ -190,20 +249,20 @@ export default function ChatPage() {
     }
   }, [lastJsonMessage, myUserId]);
 
-  // Hành động nhấn nút Gửi tin nhắn
   const handleSendMessage = (text: string) => {
     if (!text.trim()) return;
 
-    // 1. Hiển thị ngay lên màn hình của mình
+    // 🌟 TÌM AVATAR CỦA CHÍNH MÌNH ĐỂ HIỂN THỊ KHI GỬI ĐI
+    const me = membersRef.current.find((m: any) => m.user_id === myUserId);
+
     const optimisticMsg = {
       content: text,
       time: new Date().toLocaleTimeString(),
       isMe: true,
-      avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp"
+      avatar: me?.avatar_url || "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp"
     };
     setMessages(prev => [...prev, optimisticMsg]);
 
-    // 2. Bắn data JSON chuẩn DTO qua ống WebSocket lên Quarkus
     sendWsMessage(JSON.stringify({
       type: "CHAT",
       content: text
@@ -214,7 +273,6 @@ export default function ChatPage() {
     sendWsMessage(JSON.stringify({ type: "TYPING" }));
   };
 
-  // Tính năng Upload Ảnh (Tái sử dụng API Cloudinary)
   const handleUploadFile = async (file: File) => {
     try {
       const formData = new FormData();
@@ -224,15 +282,14 @@ export default function ChatPage() {
       });
 
       const fileUrl = response.data.url;
+      const me = membersRef.current.find((m: any) => m.user_id === myUserId);
 
-      // Hiển thị tạm ảnh của mình lên màn hình
       setMessages(prev => [...prev, {
         content: "Đã gửi một ảnh", time: new Date().toLocaleTimeString(), isMe: true,
-        avatar: "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp",
+        avatar: me?.avatar_url || "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp",
         attachmentUrl: fileUrl
       }]);
 
-      // Bắn link qua WS cho người kia
       sendWsMessage(JSON.stringify({
         type: "CHAT", content: "Đã gửi một ảnh", attachment_url: fileUrl
       }));
@@ -240,8 +297,6 @@ export default function ChatPage() {
       alert("Lỗi tải ảnh lên!");
     }
   };
-
-  const test = () => { };
 
   return (
     <section
@@ -254,22 +309,21 @@ export default function ChatPage() {
       >
         <div className="row h-100 w-100 g-3">
 
-          {/* BÊN TRÁI: Danh sách phòng chat */}
           <ConversationList
             conversations={conversations}
             onSelectConversation={handleSelectConversation}
             isMobileChatOpen={isMobileChatOpen}
             onOpenCreateModal={() => setShowCreateModal(true)}
             onOpenUpdateProfileModal={() => setShowUpdateProfileModal(true)}
+            onDeleteConversation={handleDeleteConversation}
           />
 
-          {/* BÊN PHẢI: Khung chat hoặc Màn hình chào mừng */}
           {activeChat.id ? (
             <ChatWindow
               messages={messages}
               isTyping={isTyping}
               myUserId={myUserId}
-              activeChatName={activeChat.name}
+              activeChat={activeChat}
               onSendMessage={handleSendMessage}
               onlineCount={onlineUsers.size}
               onTyping={handleTyping}
@@ -303,7 +357,7 @@ export default function ChatPage() {
         show={showCreateModal}
         myUserId={myUserId || ""}
         onClose={() => setShowCreateModal(false)}
-        onCreated={fetchConversations} // Load lại danh sách khi tạo xong
+        onCreated={fetchConversations} 
       />
       <AddMemberModal
         show={openAddMemberModal}
@@ -316,6 +370,7 @@ export default function ChatPage() {
         myUserId={myUserId || ""}
         onClose={() => setShowUpdateProfileModal(false)}
       />
+    
     </section>
   );
 }

@@ -6,11 +6,12 @@ import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import { GroupMembersModal } from './GroupMembersModal';
 import { useRouter } from 'next/navigation';
+import { UpdateGroupModal } from './UpdateGroupModal'; // Thêm dòng này
 
 interface ChatWindowProps {
   messages: any[];
   isTyping: boolean;
-  activeChatName: string;
+  activeChat: { id: string, name: string, avatar_url: string };
   onSendMessage: (text: string) => void;
   onTyping: () => void;
   onUploadFile: (file: File) => void;
@@ -22,11 +23,11 @@ interface ChatWindowProps {
   isLoadingMore: boolean;
   activeChatId?: string;
   myUserId: string | null;
-  showAddMemberModal: () => void
+  showAddMemberModal: () => void;
 }
 
 export const ChatWindow = ({
-  messages, isTyping, activeChatName, onSendMessage, onTyping,
+  messages, isTyping, activeChat, onSendMessage, onTyping,
   onUploadFile, isMobileChatOpen, onBackToList, onlineCount,
   onLoadMore, hasMore, isLoadingMore, activeChatId, myUserId,
   showAddMemberModal
@@ -42,21 +43,22 @@ export const ChatWindow = ({
   const [isInfoMenuOpen, setIsInfoMenuOpen] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
 
+  const [showUpdateGroupModal, setShowUpdateGroupModal] = useState(false);
 
   useEffect(() => {
     if (messages.length === 0) return;
 
     const lastMessage = messages[messages.length - 1];
     const hasNewMessage = lastMessage?.id !== lastMsgIdRef.current || !lastMessage?.id;
-    const isNewChat = activeChatName !== prevChatNameRef.current;
+    const isNewChat = activeChat.name !== prevChatNameRef.current;
 
     if (isNewChat || hasNewMessage) {
       messagesEndRef.current?.scrollIntoView({ behavior: isNewChat ? "auto" : "smooth" });
     }
 
     lastMsgIdRef.current = lastMessage?.id;
-    prevChatNameRef.current = activeChatName;
-  }, [messages, isTyping, activeChatName]);
+    prevChatNameRef.current = activeChat.name;
+  }, [messages, isTyping, activeChat]);
 
   const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
@@ -92,7 +94,7 @@ export const ChatWindow = ({
           setTimeout(
             () => {
               window.location.reload();
-            },1000
+            }, 1000
           )
         }
       }
@@ -111,8 +113,15 @@ export const ChatWindow = ({
           <button className="btn btn-sm btn-outline-secondary me-3 d-md-none" onClick={onBackToList}>
             <i className="fas fa-chevron-left"></i>
           </button>
-          <div>
-            <h5 className="mb-0 fw-bold">{activeChatName}</h5>
+          <div className='d-flex'>
+            <img
+              src={activeChat.avatar_url}
+              alt="avatar"
+              className="rounded-circle shadow-sm align-self-start"
+              style={{ width: "45px", height: "45px", objectFit: "cover" }}
+            />
+            <div className='px-2'>
+              <h5 className="mb-0 fw-bold">{activeChat.name}</h5>
             {onlineCount && onlineCount > 0 ? (
               <small className="text-success fw-bold d-flex align-items-center">
                 <span className="bg-success rounded-circle me-1" style={{ width: "8px", height: "8px", display: "inline-block" }}></span>
@@ -124,6 +133,7 @@ export const ChatWindow = ({
                 Ngoại tuyến
               </small>
             )}
+            </div>
           </div>
 
           <div className="ms-auto position-relative d-flex align-items-center">
@@ -147,7 +157,7 @@ export const ChatWindow = ({
                   style={{ position: 'absolute', top: '35px', right: '0px', left: 'auto', zIndex: 1050, minWidth: '160px' }}
                 >
                   <li>
-                    <button className="dropdown-item py-2" onClick={() => { setIsInfoMenuOpen(false); alert("Tính năng tùy chỉnh nhóm sẽ phát triển sau!"); }}>
+                    <button className="dropdown-item py-2" onClick={() => { setIsInfoMenuOpen(false); setShowUpdateGroupModal(true) }}>
                       <i className="fas fa-sliders-h me-3 text-primary"></i> Tùy chỉnh nhóm
                     </button>
                   </li>
@@ -196,12 +206,17 @@ export const ChatWindow = ({
 
       </div>
 
-    
+
       <GroupMembersModal
         show={showMembersModal}
         onClose={() => setShowMembersModal(false)}
         activeChatId={activeChatId || ""}
         openAddMemberModal={() => showAddMemberModal()}
+      />
+      <UpdateGroupModal
+        show={showUpdateGroupModal}
+        onClose={() => setShowUpdateGroupModal(false)}
+        activeChat={activeChat}
       />
     </div>
   );

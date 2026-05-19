@@ -6,13 +6,14 @@ import Swal from 'sweetalert2';
 
 interface ConversationListProps {
   conversations: any[];
-  onSelectConversation: (id: string, name: string) => void;
+  onSelectConversation: (id: string, name: string, avatar: string) => void;
   isMobileChatOpen: boolean;
   onOpenCreateModal: () => void;
   onOpenUpdateProfileModal: () => void;
+  onDeleteConversation: (e: React.MouseEvent, id: string, name: string) => void;
 }
 
-export const ConversationList = ({ conversations, onSelectConversation, isMobileChatOpen, onOpenCreateModal, onOpenUpdateProfileModal }: ConversationListProps) => {
+export const ConversationList = ({ conversations, onSelectConversation, isMobileChatOpen, onOpenCreateModal, onOpenUpdateProfileModal, onDeleteConversation }: ConversationListProps) => {
   // State quản lý việc mở/đóng Menu
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const router = useRouter();
@@ -105,8 +106,8 @@ export const ConversationList = ({ conversations, onSelectConversation, isMobile
         <div className="flex-grow-1" style={{ overflowY: "auto" }}>
           <ul className="list-unstyled mb-0">
             {conversations.map((conv, index) => (
-              <div key={index} onClick={() => onSelectConversation(conv.id, conv.name)} style={{ cursor: "pointer" }}>
-                <ConversationItem {...conv} isActive={isMobileChatOpen} />
+              <div key={index} onClick={() => onSelectConversation(conv.id, conv.name, conv.avatar)} style={{ cursor: "pointer" }}>
+                <ConversationItem {...conv} isActive={isMobileChatOpen} onDelete={onDeleteConversation} />
               </div>
             ))}
           </ul>
