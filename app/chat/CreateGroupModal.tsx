@@ -59,7 +59,9 @@ export const CreateGroupModal = ({ show, onClose, onCreated, myUserId }: CreateG
     };
 
     const handleCreate = async () => {
-        if (selectedUserIds.size === 0) return alert("Vui lòng chọn ít nhất 1 người bạn!");
+        if (selectedUserIds.size === 0) 
+            return toast.error("Vui lòng chọn 1 người!");
+            
 
         setIsLoading(true);
         try {
@@ -85,6 +87,7 @@ export const CreateGroupModal = ({ show, onClose, onCreated, myUserId }: CreateG
 
             if (res.status === 200) {
                 toast.success("Tạo nhóm thành công!")
+                setIsLoading(false);
                 onCreated(); // Load lại danh sách phòng chat
                 onClose();   // Đóng modal
                 setTitle("");

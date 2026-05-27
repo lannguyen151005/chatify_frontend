@@ -22,7 +22,7 @@ export default function ChatPage() {
 
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
   const [activeChat, setActiveChat] = useState({ id: "", name: "", avatar_url: "" });
-  const [isTyping, setIsTyping] = useState(false);
+  const [typingText, setTypingText] = useState("");
 
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set);
 
@@ -35,6 +35,7 @@ export default function ChatPage() {
   const [showUpdateProfileModal, setShowUpdateProfileModal] = useState(false);
 
   const membersRef = useRef<any[]>([]);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const token = typeof window !== "undefined" ? localStorage.getItem("jwt_token") : "";
   const myUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") : "";
@@ -149,6 +150,8 @@ export default function ChatPage() {
       if (res.data.length > 0) {
         const olderMessages = res.data.map((msg: any) => {
 
+          const isBot = msg.user_id === "2d61b0d1-1512-494b-ba1d-bf1c55de1173";
+
           const sender = membersRef.current.find((m: any) => m.user_id === msg.user_id);
 
           return {
@@ -156,7 +159,11 @@ export default function ChatPage() {
             content: msg.content,
             time: new Date(msg.created_at).toLocaleTimeString(),
             isMe: msg.user_id === myUserId,
-            avatar: sender?.avatar_url || (msg.user_id === myUserId ? "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp" : "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"),
+            avatar: isBot ?
+              "https://res.cloudinary.com/dccrvc4ok/image/upload/v1779908725/m7kwsxat7fvqithiqogt.png" :
+              (sender?.avatar_url || (msg.user_id === myUserId ?
+                "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp"
+                : "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp")),
             attachmentUrl: msg.attachment_url
           };
         });
@@ -180,7 +187,7 @@ export default function ChatPage() {
     setHasMore(true);
     setIsLoadingMore(false);
 
-    // 🌟 1. Gọi API lấy thành viên nhóm trước và lưu vào membersRef
+    // Gọi API lấy thành viên nhóm trước và lưu vào membersRef
     try {
       const membersRes = await api.get(`/api/conversations/${id}/members`);
       membersRef.current = membersRes.data;
@@ -189,12 +196,14 @@ export default function ChatPage() {
       membersRef.current = [];
     }
 
-    // 2. Lấy danh sách tin nhắn và map avatar vào
+    // Lấy danh sách tin nhắn và map avatar vào
     try {
       const res = await api.get(`/api/messages/${id}?page=0&size=20`);
       const historyMessages = res.data.map(
         (msg: any) => {
-          // 🌟 TÌM KIẾM AVATAR TỪ DANH SÁCH THÀNH VIÊN
+          const isBot = msg.user_id === "2d61b0d1-1512-494b-ba1d-bf1c55de1173";
+
+          // TÌM KIẾM AVATAR TỪ DANH SÁCH THÀNH VIÊN
           const sender = membersRef.current.find((m: any) => m.user_id === msg.user_id);
 
           return {
@@ -202,7 +211,11 @@ export default function ChatPage() {
             content: msg.content,
             time: new Date(msg.created_at).toLocaleTimeString(),
             isMe: msg.user_id === myUserId,
-            avatar: sender?.avatar_url || (msg.user_id === myUserId ? "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp" : "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"),
+            avatar: isBot ?
+              "https://res.cloudinary.com/dccrvc4ok/image/upload/v1779908725/m7kwsxat7fvqithiqogt.png" :
+              (sender?.avatar_url || (msg.user_id === myUserId ?
+                "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava6-bg.webp"
+                : "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp")),
             attachmentUrl: msg.attachment_url
           };
         }
@@ -237,19 +250,32 @@ export default function ChatPage() {
 
       if (data.type === "TYPING") {
         if (data.senderId !== myUserId) {
-          setIsTyping(true);
-          setTimeout(() => setIsTyping(false), 3000);
+          if (data.senderId === "bot_charles") {
+            setTypingText("Charles đang suy nghĩ...");
+          } else {
+            const sender = membersRef.current.find((m: any) => m.user_id === data.senderId);
+            setTypingText(`${sender?.username || 'Ai đó'} đang gõ...`);
+          }
+
+          if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+          }
+
+          typingTimeoutRef.current = setTimeout(() => {
+            setTypingText("");
+          }, 2000);
         }
         return;
       }
 
-      if (data.type === "READ") {
-        console.log(`User ${data.userId} đã xem tin nhắn`);
-        return;
-      }
+      if (data.type === "CHAT" && data.user_id !== myUserId) {
 
-      if (data.user_id !== myUserId) {
-        // 🌟 LẤY AVATAR KHI CÓ TIN NHẮN REALTIME ĐẾN
+        setTypingText("");
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+
+        const isBot = data.user_id === "bot_charles";
         const sender = membersRef.current.find((m: any) => m.user_id === data.user_id);
 
         const incomingMsg = {
@@ -257,7 +283,9 @@ export default function ChatPage() {
           content: data.content,
           time: new Date().toLocaleTimeString(),
           isMe: false,
-          avatar: sender?.avatar_url || "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp",
+          avatar: isBot
+            ? "https://res.cloudinary.com/dccrvc4ok/image/upload/v1779908725/m7kwsxat7fvqithiqogt.png"
+            : (sender?.avatar_url || "https://mdbcdn.b-cdn.net/img/Photos/new-templates/bootstrap-chat/ava1-bg.webp"),
           attachmentUrl: data.attachment_url
         };
         setMessages(prev => [...prev, incomingMsg]);
@@ -268,7 +296,7 @@ export default function ChatPage() {
   const handleSendMessage = (text: string) => {
     if (!text.trim()) return;
 
-    // 🌟 TÌM AVATAR CỦA CHÍNH MÌNH ĐỂ HIỂN THỊ KHI GỬI ĐI
+    // TÌM AVATAR CỦA CHÍNH MÌNH ĐỂ HIỂN THỊ KHI GỬI ĐI
     const me = membersRef.current.find((m: any) => m.user_id === myUserId);
 
     const optimisticMsg = {
@@ -347,7 +375,7 @@ export default function ChatPage() {
           {activeChat.id ? (
             <ChatWindow
               messages={messages}
-              isTyping={isTyping}
+              typingText={typingText}
               myUserId={myUserId}
               activeChat={activeChat}
               onSendMessage={handleSendMessage}

@@ -10,7 +10,7 @@ import { UpdateGroupModal } from './UpdateGroupModal'; // Thêm dòng này
 
 interface ChatWindowProps {
   messages: any[];
-  isTyping: boolean;
+  typingText: string;
   activeChat: { id: string, name: string, avatar_url: string };
   onSendMessage: (text: string) => void;
   onTyping: () => void;
@@ -27,7 +27,7 @@ interface ChatWindowProps {
 }
 
 export const ChatWindow = ({
-  messages, isTyping, activeChat, onSendMessage, onTyping,
+  messages, typingText, activeChat, onSendMessage, onTyping,
   onUploadFile, isMobileChatOpen, onBackToList, onlineCount,
   onLoadMore, hasMore, isLoadingMore, activeChatId, myUserId,
   showAddMemberModal
@@ -58,7 +58,7 @@ export const ChatWindow = ({
 
     lastMsgIdRef.current = lastMessage?.id;
     prevChatNameRef.current = activeChat.name;
-  }, [messages, isTyping, activeChat]);
+  }, [messages, typingText, activeChat]);
 
   const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
@@ -195,7 +195,12 @@ export const ChatWindow = ({
           {messages.map((msg, index) => (
             <MessageItem key={index} {...msg} />
           ))}
-          {isTyping && <div className="text-muted small ms-3 mt-2 font-italic">Ai đó đang gõ...</div>}
+          {typingText && (
+            <div className="text-muted small ms-3 mt-2 font-italic d-flex align-items-center">
+               <div className="spinner-grow spinner-grow-sm text-secondary me-2" role="status" style={{width: '0.8rem', height: '0.8rem'}}></div>
+               {typingText}
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 

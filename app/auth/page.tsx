@@ -44,8 +44,10 @@ export default function LoginPage() {
         router.push('/');
       } else {
         // GỌI API ĐĂNG KÝ
-        await api.post('/api/auth/register', formDataRegister);
-        alert('Đăng ký thành công! Vui lòng đăng nhập.');
+        const res = await api.post('/api/auth/register', formDataRegister);
+        if(res.status===200){
+          toast.success("Đăng ký thành công!");
+        }
         setIsLoginMode(true); // Chuyển về form đăng nhập
       }
     } catch (error: any) {
@@ -60,7 +62,7 @@ export default function LoginPage() {
     <section 
       className="vh-100 d-flex justify-content-center align-items-center" 
       style={{ 
-        // 🌟 GẮN ẢNH BACKGROUND TẠI ĐÂY
+        //GẮN ẢNH BACKGROUND TẠI ĐÂY
         backgroundImage: "url('/background.png')", 
         backgroundSize: "cover",
         backgroundPosition: "center",
