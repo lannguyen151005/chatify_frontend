@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ConversationItem } from './items/ConversationItem';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
+import { jwtDecode } from 'jwt-decode';
 
 interface ConversationListProps {
   conversations: any[];
@@ -17,6 +18,21 @@ export const ConversationList = ({ conversations, onSelectConversation, isMobile
   // State quản lý việc mở/đóng Menu
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("jwt_token");
+    if (token) {
+      try {
+        const decoded: any = jwtDecode(token);
+        if (decoded.groups.includes('ADMIN')) {
+          setIsAdmin(true);
+        }
+      } catch (error) {
+        console.error("Lỗi đọc token:", error);
+      }
+    }
+  }, []);
 
   // Hàm xử lý Đăng xuất
   const handleLogout = async () => {
@@ -39,7 +55,7 @@ export const ConversationList = ({ conversations, onSelectConversation, isMobile
 
       toast.success("Đăng xuất thành công!");
 
-      router.push("/auth");
+      router.push("/login");
     }
   };
 
@@ -83,6 +99,18 @@ export const ConversationList = ({ conversations, onSelectConversation, isMobile
                     Tạo nhóm mới
                   </button>
                 </li>
+                {/* NÚT TRANG QUẢN TRỊ - CHỈ HIỆN KHI LÀ ADMIN */}
+                {isAdmin && (
+                  <li>
+                    <button 
+                      className="dropdown-item py-2 fw-bold text-warning" 
+                      onClick={() => { setIsMenuOpen(false); router.push('/admin'); }}
+                    >
+                      <i className="fas fa-user-shield me-3"></i>
+                      Trang Quản Trị
+                    </button>
+                  </li>
+                )}
                 <li><hr className="dropdown-divider" /></li>
                 <li>
                   <button className="dropdown-item py-2 text-danger fw-bold" onClick={handleLogout}>

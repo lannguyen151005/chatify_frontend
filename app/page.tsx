@@ -148,7 +148,7 @@ export default function ChatPage() {
       }
 
       if (res.data.length > 0) {
-        const olderMessages = res.data.map((msg: any) => {
+        const olderMessages = res.data.reverse().map((msg: any) => {
 
           const isBot = msg.user_id === "2d61b0d1-1512-494b-ba1d-bf1c55de1173";
 
@@ -157,7 +157,13 @@ export default function ChatPage() {
           return {
             id: msg.id,
             content: msg.content,
-            time: new Date(msg.created_at).toLocaleTimeString(),
+            time: new Date(msg.created_at).toLocaleString('vi-VN', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
             isMe: msg.user_id === myUserId,
             avatar: isBot ?
               "https://res.cloudinary.com/dccrvc4ok/image/upload/v1779908725/m7kwsxat7fvqithiqogt.png" :
@@ -199,7 +205,7 @@ export default function ChatPage() {
     // Lấy danh sách tin nhắn và map avatar vào
     try {
       const res = await api.get(`/api/messages/${id}?page=0&size=20`);
-      const historyMessages = res.data.map(
+      const historyMessages = res.data.reverse().map(
         (msg: any) => {
           const isBot = msg.user_id === "2d61b0d1-1512-494b-ba1d-bf1c55de1173";
 
@@ -209,7 +215,13 @@ export default function ChatPage() {
           return {
             id: msg.id,
             content: msg.content,
-            time: new Date(msg.created_at).toLocaleTimeString(),
+            time: new Date(msg.created_at).toLocaleString('vi-VN', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
             isMe: msg.user_id === myUserId,
             avatar: isBot ?
               "https://res.cloudinary.com/dccrvc4ok/image/upload/v1779908725/m7kwsxat7fvqithiqogt.png" :
@@ -275,7 +287,7 @@ export default function ChatPage() {
           clearTimeout(typingTimeoutRef.current);
         }
 
-        const isBot = data.user_id === "bot_charles";
+        const isBot = data.user_id === "2d61b0d1-1512-494b-ba1d-bf1c55de1173";
         const sender = membersRef.current.find((m: any) => m.user_id === data.user_id);
 
         const incomingMsg = {
@@ -399,7 +411,7 @@ export default function ChatPage() {
                     <i className="fas fa-comments text-secondary" style={{ fontSize: "4rem", opacity: 0.5 }}></i>
                   </div>
                   <h4>Chào mừng đến với Chatify!</h4>
-                  <p>Hãy chọn một phòng chat bên trái để bắt đầu trò chuyện.</p>
+                  <p>Hãy chọn phòng chat để bắt đầu trò chuyện.</p>
                 </div>
               </div>
             </div>

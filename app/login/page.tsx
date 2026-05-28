@@ -62,12 +62,12 @@ export default function LoginPage() {
     <section 
       className="vh-100 d-flex justify-content-center align-items-center" 
       style={{ 
-        //GẮN ẢNH BACKGROUND TẠI ĐÂY
+
         backgroundImage: "url('/background.png')", 
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
-        backgroundColor: "#d6f0f4" // Màu nền dự phòng (theo đúng màu gốc của bạn)
+        backgroundColor: "#d6f0f4" 
       }}
     >
       <div className="container">
@@ -77,7 +77,6 @@ export default function LoginPage() {
               className="card shadow-lg border-0" 
               style={{ 
                 borderRadius: "1rem",
-                // 🌟 HIỆU ỨNG KÍNH MỜ CHO CARD
                 backgroundColor: "rgba(255, 255, 255, 0.85)", 
                 backdropFilter: "blur(8px)" 
               }}
